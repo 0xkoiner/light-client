@@ -30,16 +30,14 @@ async function main() {
   });
 
   try {
-    // Fetch checkpoint and initialize
+    // Initialize and sync light client
     console.log('🔧 Initializing light client...');
-    const checkpointResponse = await fetch(networkConfig.checkpointSyncUrl);
-    const checkpointData = await checkpointResponse.json();
-    const checkpointRoot = checkpointData.data?.root || checkpointData.root;
+    console.log('   (This may take a moment - fetching checkpoint and syncing...)\n');
 
-    await client.initialize(checkpointRoot);
+    await client.initialize();
     await client.start();
 
-    console.log('✓ Light client synced\n');
+    console.log('✓ Light client synced!\n');
 
     // Example addresses to query (Vitalik's address on all networks)
     const address = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045';

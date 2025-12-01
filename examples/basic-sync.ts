@@ -57,22 +57,10 @@ async function main() {
   });
 
   try {
-    // Get trusted checkpoint
-    console.log('📍 Fetching trusted checkpoint...');
-    const checkpointResponse = await fetch(networkConfig.checkpointSyncUrl);
-
-    if (!checkpointResponse.ok) {
-      throw new Error(`Failed to fetch checkpoint: ${checkpointResponse.statusText}`);
-    }
-
-    const checkpointData = await checkpointResponse.json();
-    const checkpointRoot = checkpointData.data?.root || checkpointData.root;
-
-    console.log(`✓ Checkpoint root: ${checkpointRoot}\n`);
-
-    // Initialize from checkpoint
+    // Initialize light client (will fetch checkpoint automatically if not provided)
     console.log('🔧 Initializing light client...');
-    await client.initialize(checkpointRoot);
+    console.log('   (Fetching finalized checkpoint from beacon node...)');
+    await client.initialize();
 
     // Start syncing
     console.log('🔄 Starting sync...');

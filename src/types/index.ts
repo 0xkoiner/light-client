@@ -98,3 +98,54 @@ export enum LightClientEvent {
   SYNC_PROGRESS = 'sync_progress',
   ERROR = 'error',
 }
+
+/**
+ * Execution layer account proof (EIP-1186)
+ */
+export interface AccountProof {
+  /** Account address */
+  address: string;
+
+  /** Account balance in wei */
+  balance: bigint;
+
+  /** Account nonce */
+  nonce: number;
+
+  /** Code hash */
+  codeHash: string;
+
+  /** Storage hash */
+  storageHash: string;
+
+  /** Merkle proof for account */
+  accountProof: string[];
+
+  /** Storage proofs for requested keys */
+  storageProof: StorageProofEntry[];
+}
+
+/**
+ * Storage proof entry
+ */
+export interface StorageProofEntry {
+  /** Storage key */
+  key: string;
+
+  /** Storage value */
+  value: string;
+
+  /** Merkle proof for storage slot */
+  proof: string[];
+}
+
+/**
+ * Storage proof result
+ */
+export interface StorageProof {
+  /** Contract address */
+  address: string;
+
+  /** Storage proofs for requested keys */
+  storageProof: StorageProofEntry[];
+}
