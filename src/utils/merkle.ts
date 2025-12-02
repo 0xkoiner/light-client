@@ -5,6 +5,8 @@
 
 import { keccak256 } from 'ethereum-cryptography/keccak.js';
 import { RLP } from '@ethereumjs/rlp';
+import { Trie } from '@ethereumjs/trie';
+import { bytesToHex, hexToBytes } from '@ethereumjs/util';
 
 /**
  * Verify Merkle Patricia Trie proof
@@ -101,7 +103,7 @@ export function verifyMerkleProof(
 }
 
 /**
- * Verify account proof against state root
+ * Verify account proof against state root using @ethereumjs/trie
  *
  * @param stateRoot - State root from consensus layer
  * @param address - Account address
@@ -112,7 +114,7 @@ export function verifyMerkleProof(
  * @param storageHash - Expected storage hash
  * @returns True if proof is valid
  */
-export function verifyAccountProof(
+export async function verifyAccountProof(
   stateRoot: string,
   address: string,
   accountProof: string[],
@@ -120,29 +122,37 @@ export function verifyAccountProof(
   nonce: number,
   codeHash: string,
   storageHash: string
-): boolean {
+): Promise<boolean> {
   try {
     // Convert state root to bytes
-    const rootBytes = hexToBytes(stateRoot);
+    const rootBytes = hexToBytes(stateRoot as `0x${string}`);
 
-    // Hash address to get key
-    const addressBytes = hexToBytes(address);
+    // Hash address to get key (keccak256 of address)
+    const addressBytes = hexToBytes(address as `0x${string}`);
     const keyBytes = keccak256(addressBytes);
 
-    // Convert proof to bytes
-    const proofBytes = accountProof.map((p) => hexToBytes(p));
+    // Convert proof to bytes (array of Uint8Arrays)
+    const proofBytes = accountProof.map((p) => hexToBytes(p as `0x${string}`));
 
-    // RLP encode account data [nonce, balance, storageHash, codeHash]
+    // RLP encode expected account data [nonce, balance, storageHash, codeHash]
     const accountData = [
       nonce === 0 ? new Uint8Array() : bigintToBytes(BigInt(nonce)),
       balance === BigInt(0) ? new Uint8Array() : bigintToBytes(balance),
-      hexToBytes(storageHash),
-      hexToBytes(codeHash),
+      hexToBytes(storageHash as `0x${string}`),
+      hexToBytes(codeHash as `0x${string}`),
     ];
-    const accountRlp = RLP.encode(accountData);
+    const expectedAccountRlp = RLP.encode(accountData);
 
-    // Verify proof
-    return verifyMerkleProof(rootBytes, keyBytes, proofBytes, accountRlp);
+    // Use @ethereumjs/trie to verify the proof
+    const verified = await Trie.verifyProof(keyBytes, proofBytes, { root: rootBytes });
+
+    // If verification fails (null), return false
+    if (!verified) {
+      return false;
+    }
+
+    // Compare the verified value with expected account RLP
+    return arraysEqual(verified, expectedAccountRlp);
   } catch (error) {
     console.error('Account proof verification error:', error);
     return false;
@@ -150,7 +160,7 @@ export function verifyAccountProof(
 }
 
 /**
- * Verify storage proof against storage root
+ * Verify storage proof against storage root using @ethereumjs/trie
  *
  * @param storageRoot - Storage root from account proof
  * @param storageKey - Storage key
@@ -158,28 +168,36 @@ export function verifyAccountProof(
  * @param expectedValue - Expected storage value
  * @returns True if proof is valid
  */
-export function verifyStorageProof(
+export async function verifyStorageProof(
   storageRoot: string,
   storageKey: string,
   storageProof: string[],
   expectedValue: string
-): boolean {
+): Promise<boolean> {
   try {
     // Convert storage root to bytes
-    const rootBytes = hexToBytes(storageRoot);
+    const rootBytes = hexToBytes(storageRoot as `0x${string}`);
 
-    // Hash storage key
-    const keyBytes = keccak256(hexToBytes(storageKey));
+    // Hash storage key (keccak256 of storage slot)
+    const keyBytes = keccak256(hexToBytes(storageKey as `0x${string}`));
 
-    // Convert proof to bytes
-    const proofBytes = storageProof.map((p) => hexToBytes(p));
+    // Convert proof to bytes (array of Uint8Arrays)
+    const proofBytes = storageProof.map((p) => hexToBytes(p as `0x${string}`));
 
-    // RLP encode storage value
-    const valueBytes = hexToBytes(expectedValue);
-    const valueRlp = RLP.encode(valueBytes);
+    // RLP encode expected storage value
+    const valueBytes = hexToBytes(expectedValue as `0x${string}`);
+    const expectedValueRlp = RLP.encode(valueBytes);
 
-    // Verify proof
-    return verifyMerkleProof(rootBytes, keyBytes, proofBytes, valueRlp);
+    // Use @ethereumjs/trie to verify the proof
+    const verified = await Trie.verifyProof(keyBytes, proofBytes, { root: rootBytes });
+
+    // If verification fails (null), return false
+    if (!verified) {
+      return false;
+    }
+
+    // Compare the verified value with expected value RLP
+    return arraysEqual(verified, expectedValueRlp);
   } catch (error) {
     console.error('Storage proof verification error:', error);
     return false;
@@ -187,12 +205,6 @@ export function verifyStorageProof(
 }
 
 // Helper functions
-
-function hexToBytes(hex: string): Uint8Array {
-  const cleaned = hex.startsWith('0x') ? hex.slice(2) : hex;
-  if (cleaned.length === 0) return new Uint8Array();
-  return Uint8Array.from(Buffer.from(cleaned, 'hex'));
-}
 
 function bytesToNibbles(bytes: Uint8Array): number[] {
   const nibbles: number[] = [];

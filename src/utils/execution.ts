@@ -96,4 +96,16 @@ export class ExecutionClient {
       storageProof: proof.storageProof,
     };
   }
+
+  /**
+   * Get block by number to retrieve state root
+   *
+   * @param blockNumber - Block number or 'latest'
+   * @returns Block data including state root
+   */
+  async getBlock(blockNumber: string | number): Promise<any> {
+    const blockTag =
+      typeof blockNumber === 'number' ? `0x${blockNumber.toString(16)}` : blockNumber;
+    return await this.provider.send('eth_getBlockByNumber', [blockTag, false]);
+  }
 }

@@ -177,40 +177,63 @@ export class LightClient extends EventEmitter {
     // 2. Create execution client
     const executionClient = new ExecutionClient(this.config.executionRpcUrl);
 
-    // 3. Get account proof from RPC (execution layer)
-    const proof = await executionClient.getAccountProof(address);
+    // 3. Get execution block number from light client
+    const executionBlockNumber = this.getExecutionBlockNumber();
+    if (!executionBlockNumber) {
+      throw new Error('Execution block number not available from light client');
+    }
+
+    // 4. Get the block from execution RPC to verify state root
+    const executionBlock = await executionClient.getBlock(executionBlockNumber);
+    const executionStateRoot = executionBlock.stateRoot;
+
+    console.log('\n🔍 State Root Comparison:');
+    console.log(`  Light Client (consensus): ${stateRoot}`);
+    console.log(`  Execution RPC (block #${executionBlockNumber}): ${executionStateRoot}`);
+    console.log(`  Match: ${stateRoot === executionStateRoot ? '✅ YES' : '❌ NO'}`);
+
+    if (stateRoot !== executionStateRoot) {
+      console.log(`\n  Light client slot: ${this.getOptimisticSlot()}`);
+      console.log(`  Execution block number: ${executionBlockNumber}`);
+      console.log(
+        '\n  ⚠️  State roots STILL do not match! This suggests an MPT implementation bug.'
+      );
+    }
+
+    // 5. Get account proof from RPC at the specific block number
+    const blockTag = `0x${executionBlockNumber.toString(16)}`;
+    const proof = await executionClient.getAccountProof(address, blockTag);
 
     // Debug: Log proof details
     if (process.env.DEBUG === 'true') {
-      console.log('Debug - State Root:', stateRoot);
-      console.log('Debug - Account Proof length:', proof.accountProof.length);
-      console.log('Debug - Balance:', proof.balance.toString());
-      console.log('Debug - Nonce:', proof.nonce);
+      console.log('\nDebug - Proof Details:');
+      console.log('  Account Proof length:', proof.accountProof.length);
+      console.log('  Balance:', proof.balance.toString());
+      console.log('  Nonce:', proof.nonce);
+      console.log('  Code Hash:', proof.codeHash);
+      console.log('  Storage Hash:', proof.storageHash);
     }
 
-    // 4. For now, skip verification and return the balance
-    // TODO: Fix Merkle proof verification
-    // const isValid = verifyAccountProof(
-    //   stateRoot,
-    //   address,
-    //   proof.accountProof,
-    //   proof.balance,
-    //   proof.nonce,
-    //   proof.codeHash,
-    //   proof.storageHash
-    // );
-
-    // if (!isValid) {
-    //   throw new Error(
-    //     'Invalid proof - RPC may be compromised! Balance proof does not match state root.'
-    //   );
-    // }
-
-    console.warn(
-      '⚠️  Warning: Proof verification temporarily disabled. Balance is not cryptographically verified.'
+    // 6. Verify the account proof against the state root
+    const isValid = await verifyAccountProof(
+      stateRoot,
+      address,
+      proof.accountProof,
+      proof.balance,
+      proof.nonce,
+      proof.codeHash,
+      proof.storageHash
     );
 
-    // 5. Return balance (unverified for now)
+    if (!isValid) {
+      throw new Error(
+        'Invalid proof - RPC may be compromised! Balance proof does not match state root.'
+      );
+    }
+
+    console.log('✅ Proof verified! Balance is cryptographically verified.\n');
+
+    // 7. Return verified balance
     return proof.balance;
   }
 
@@ -235,11 +258,17 @@ export class LightClient extends EventEmitter {
     // 2. Create execution client
     const executionClient = new ExecutionClient(this.config.executionRpcUrl);
 
-    // 3. Get account proof from RPC
-    const proof = await executionClient.getAccountProof(address);
+    // 3. Get execution block number and query proof at that block
+    const executionBlockNumber = this.getExecutionBlockNumber();
+    if (!executionBlockNumber) {
+      throw new Error('Execution block number not available from light client');
+    }
 
-    // 4. Verify proof against state root
-    const isValid = verifyAccountProof(
+    const blockTag = `0x${executionBlockNumber.toString(16)}`;
+    const proof = await executionClient.getAccountProof(address, blockTag);
+
+    // 4. Verify account proof against state root
+    const isValid = await verifyAccountProof(
       stateRoot,
       address,
       proof.accountProof,
@@ -286,13 +315,21 @@ export class LightClient extends EventEmitter {
     // 2. Create execution client
     const executionClient = new ExecutionClient(this.config.executionRpcUrl);
 
-    // 3. Get account proof with storage proof
-    const proof = await executionClient.getAccountWithStorageProof(address, [
-      slot,
-    ]);
+    // 3. Get execution block number and query proof at that block
+    const executionBlockNumber = this.getExecutionBlockNumber();
+    if (!executionBlockNumber) {
+      throw new Error('Execution block number not available from light client');
+    }
+
+    const blockTag = `0x${executionBlockNumber.toString(16)}`;
+    const proof = await executionClient.getAccountWithStorageProof(
+      address,
+      [slot],
+      blockTag
+    );
 
     // 4. Verify account proof first
-    const accountValid = verifyAccountProof(
+    const accountValid = await verifyAccountProof(
       stateRoot,
       address,
       proof.accountProof,
@@ -314,7 +351,7 @@ export class LightClient extends EventEmitter {
       return '0x0'; // Empty storage
     }
 
-    const storageValid = verifyStorageProof(
+    const storageValid = await verifyStorageProof(
       proof.storageHash,
       slot,
       storageEntry.proof,
@@ -348,13 +385,39 @@ export class LightClient extends EventEmitter {
   /**
    * Get the state root from the current head
    * Used for verifying execution layer proofs
+   *
+   * IMPORTANT: Returns the EXECUTION payload state root, not beacon chain state root
    */
   getStateRoot(): string {
     const head = this.lodestarClient?.getHead();
     if (!head) return '0x';
 
+    // Get state root from execution payload, not beacon chain state
+    const execution = (head as any).execution;
+    if (!execution || !execution.stateRoot) {
+      // Fallback to beacon state root if execution not available
+      const stateRoot = head.beacon.stateRoot;
+      return '0x' + Buffer.from(stateRoot).toString('hex');
+    }
+
     // Convert Uint8Array to hex string
-    const stateRoot = head.beacon.stateRoot;
-    return '0x' + Buffer.from(stateRoot).toString('hex');
+    return '0x' + Buffer.from(execution.stateRoot).toString('hex');
+  }
+
+  /**
+   * Get the execution payload block number from current head
+   * This is the execution layer block number, not beacon chain slot
+   */
+  getExecutionBlockNumber(): number | null {
+    const head = this.lodestarClient?.getHead();
+    if (!head) return null;
+
+    // The execution payload contains the block number
+    const execution = (head as any).execution;
+    if (!execution || !execution.blockNumber) {
+      return null;
+    }
+
+    return Number(execution.blockNumber);
   }
 }
