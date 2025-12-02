@@ -1,0 +1,26 @@
+{
+  "mainnet": {
+    "name": "Ethereum Mainnet",
+    "beaconNodeUrl": "https://lodestar-mainnet.chainsafe.io",
+    "executionRpcUrl": "https://eth-mainnet.g.alchemy.com/v2/demo",
+    "checkpointSyncUrl": "https://beaconstate.info/eth/v2/debug/beacon/states/finalized",
+    "genesisTime": 1606824023,
+    "genesisValidatorsRoot": "0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95"
+  },
+  "sepolia": {
+    "name": "Sepolia Testnet",
+    "beaconNodeUrl": "https://lodestar-sepolia.chainsafe.io",
+    "executionRpcUrl": "https://eth-sepolia.g.alchemy.com/v2/demo",
+    "checkpointSyncUrl": "https://checkpoint-sync.sepolia.ethpandaops.io",
+    "genesisTime": 1655733600,
+    "genesisValidatorsRoot": "0xd8ea171f3c94aea21ebc42a1ed61052acf3f9209c00e4efbaaddac09ed9b8078"
+  },
+  "holesky": {
+    "name": "Holesky Testnet",
+    "beaconNodeUrl": "https://lodestar-holesky.chainsafe.io",
+    "executionRpcUrl": "https://eth-holesky.g.alchemy.com/v2/demo",
+    "checkpointSyncUrl": "https://checkpoint-sync.holesky.ethpandaops.io",
+    "genesisTime": 1695902400,
+    "genesisValidatorsRoot": "0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1"
+  }
+}
